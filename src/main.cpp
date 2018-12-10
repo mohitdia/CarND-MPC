@@ -1,4 +1,5 @@
-#include "json.hpp"
+// Reference - https://github.com/darienmt/CarND-MPC-Project-P5
+
 #include <math.h>
 #include <uWS/uWS.h>
 #include <chrono>
@@ -8,6 +9,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "MPC.h"
+#include "json.hpp"
 
 // for convenience
 using json = nlohmann::json;
@@ -65,6 +67,33 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+Eigen::VectorXd initStateWithDelay(Eigen::VectorXd coefficients, double a, double v, double delta, double Lf ) {
+  // Simulating actuator delay - in seconds
+  const double actuator_delay = 0.1;
+
+  // Initializing state
+  const double x0 = 0;
+  const double y0 = 0;
+  const double psi0 = 0;
+  const double cte0 = coefficients[0];
+  const double epsi0 = -atan(coefficients[1]);
+
+  // Incorporating delay in state
+  // State after delay.
+  double x_delay = x0 + ( v * cos(psi0) * actuator_delay );
+  double y_delay = y0 + ( v * sin(psi0) * actuator_delay );
+  double psi_delay = psi0 - ( v * delta * actuator_delay / Lf );
+  double v_delay = v + a * actuator_delay;
+  double cte_delay = cte0 + ( v * sin(epsi0) * actuator_delay );
+  double epsi_delay = epsi0 - ( v * atan(coefficients[1]) * actuator_delay / Lf );
+
+  // State vector initialization
+  Eigen::VectorXd state(6);
+  state << x_delay, y_delay, psi_delay, v_delay, cte_delay, epsi_delay;
+
+  return state;
+}
+
 int main() {
   uWS::Hub h;
 
@@ -91,19 +120,40 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
-
+          double delta= j[1]["steering_angle"];
+          double a = j[1]["throttle"];
+          
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          // Pre-processing step - transforming waypoints coordinates to car coordinates
+          unsigned int num_waypoints = ptsx.size();
+          auto transformed_ptsx = Eigen::VectorXd(num_waypoints);
+          auto transformed_ptsy = Eigen::VectorXd(num_waypoints);
+          for (unsigned int i = 0; i < num_waypoints; i++ ) {
+            double dX = ptsx[i] - px;
+            double dY = ptsy[i] - py;
+            double minus_psi = 0.0 - psi;
+            transformed_ptsx( i ) = dX * cos( minus_psi ) - dY * sin( minus_psi );
+            transformed_ptsy( i ) = dX * sin( minus_psi ) + dY * cos( minus_psi );
+          }
+          
+          // Fit polynomial to the transformed points - Assigning the type to auto so the type can be automatically inferred.
+          auto coefficients = polyfit(transformed_ptsx, transformed_ptsy, 3);
+
+          auto state = initStateWithDelay(coefficients, a, v, delta, mpc.Lf);
+          // Run the state and calculated coefficients through MPC
+          auto vars = mpc.Solve(state, coefficients);
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
+          double steer_value = vars[0]/deg2rad(25);
+          double throttle_value = vars[1];
+          
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
@@ -113,6 +163,14 @@ int main() {
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
+          
+          for ( unsigned int i = 2; i < vars.size(); i++ ) {
+            if ( i % 2 == 0 ) {
+              mpc_x_vals.push_back( vars[i] );
+            } else {
+              mpc_y_vals.push_back( vars[i] );
+            }
+          }
 
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
@@ -123,6 +181,14 @@ int main() {
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
+          //Display the waypoints/reference line
+          double poly_inc = 2.5;
+          int num_points = 25;
+          for ( int i = 0; i < num_points; i++ ) {
+            double x = poly_inc * i;
+            next_x_vals.push_back( x );
+            next_y_vals.push_back( polyeval(coefficients, x) );
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
