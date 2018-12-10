@@ -11,6 +11,8 @@
 #include "MPC.h"
 #include "json.hpp"
 
+using namespace std;
+
 // for convenience
 using json = nlohmann::json;
 
