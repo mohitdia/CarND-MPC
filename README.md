@@ -14,11 +14,7 @@ The project has the following dependencies (from Udacity's seed project):
 - gcc/g++ >= 5.4
 - Udacity's simulator.
 
-For instructions on how to install these components on different operating systems, please, visit [Udacity's seed project](https://github.com/udacity/CarND-MPC-Project). As this particular implementation was done on Mac OS, the rest of this documentation will be focused on Mac OS. I am sorry to be that restrictive.
-
-In order to install the necessary libraries, use the [install-mac.sh](./install-mac.sh).
-
-After that installation, there are two other required libraries:
+In addition to the above, there are two other required libraries:
 
 - [Ipopt](https://projects.coin-or.org/Ipopt): To install this library we need to tap homebrew/science first:
 
@@ -67,7 +63,7 @@ Now the MPC controller is running and listening on port 4567 for messages from t
 
 Click the "Select" button, and the car starts driving. You will see the debugging information on the PID controller terminal.
 
-# [Rubic](https://review.udacity.com/#!/rubrics/896/view) points
+# Rubic points
 
 ## Compilation
 
